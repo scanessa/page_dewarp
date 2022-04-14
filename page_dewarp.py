@@ -165,12 +165,13 @@ def draw_correspondences(img, dstpoints, projpts):
 
 
 def get_default_params(corners, ycoords, xcoords):
-
+    
     # page width and height
     page_width = np.linalg.norm(corners[1] - corners[0])
     page_height = np.linalg.norm(corners[-1] - corners[0])
     rough_dims = (page_width, page_height)
 
+    
     # our initial guess for the cubic has no slope
     cubic_slopes = [0.0, 0.0]
 
@@ -459,7 +460,7 @@ def get_contours(name, small, pagemask, masktype):
     contours = cv2.findContours(mask, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)[-2]
 
     contours_out = []
-
+    print("Contours: ",contours)
     for contour in contours:
 
         rect = cv2.boundingRect(contour)
@@ -551,7 +552,7 @@ def sample_spans(shape, spans):
     span_points = []
 
     for span in spans:
-
+        
         contour_points = []
 
         for cinfo in span:
@@ -580,6 +581,7 @@ def sample_spans(shape, spans):
 
 def keypoints_from_samples(name, small, pagemask, page_outline,
                            span_points):
+    
 
     all_evecs = np.array([[0.0, 0.0]])
     all_weights = 0
@@ -595,7 +597,6 @@ def keypoints_from_samples(name, small, pagemask, page_outline,
         all_weights += weight
 
     evec = all_evecs / all_weights
-
     x_dir = evec.flatten()
 
     if x_dir[0] < 0:
@@ -625,7 +626,8 @@ def keypoints_from_samples(name, small, pagemask, page_outline,
 
     ycoords = []
     xcoords = []
-
+    
+    
     for points in span_points:
         pts = points.reshape((-1, 2))
         px_coords = np.dot(pts, x_dir)
@@ -768,17 +770,43 @@ def optimize_params(name, small, dstpoints, span_counts, params):
 
     return params
 
+def project_xy_test(xy_coords, pvec):
+
+    # get cubic polynomial coefficients given
+    #
+    #  f(0) = 0, f'(0) = alpha
+    #  f(1) = 0, f'(1) = beta
+
+    alpha, beta = tuple(pvec[CUBIC_IDX])
+
+    poly = np.array([
+        alpha + beta,
+        -2*alpha - beta,
+        alpha,
+        0])
+    
+    xy_coords = xy_coords.reshape((-1, 2))
+    
+    z_coords = np.polyval(poly, xy_coords[:, 0])
+
+    objpoints = np.hstack((xy_coords, z_coords.reshape((-1, 1))))
+
+    image_points, _ = cv2.projectPoints(objpoints,
+                                        pvec[RVEC_IDX],
+                                        pvec[TVEC_IDX],
+                                        K, np.zeros(5))
+    
+    return image_points
 
 def get_page_dims(corners, rough_dims, params):
 
     dst_br = corners[2].flatten()
-
     dims = np.array(rough_dims)
-
+    
     def objective(dims):
-        proj_br = project_xy(dims, params)
+        proj_br = project_xy_test(dims, params)
         return np.sum((dst_br - proj_br.flatten())**2)
-
+    
     res = scipy.optimize.minimize(objective, dims, method='Powell')
     dims = res.x
 
@@ -788,7 +816,9 @@ def get_page_dims(corners, rough_dims, params):
 
 
 def remap_image(name, img, small, page_dims, params):
-
+    
+    print("remap image")
+    
     height = 0.5 * page_dims[1] * OUTPUT_ZOOM * img.shape[0]
     height = round_nearest_multiple(height, REMAP_DECIMATE)
 
@@ -799,9 +829,13 @@ def remap_image(name, img, small, page_dims, params):
 
     height_small = height / REMAP_DECIMATE
     width_small = width / REMAP_DECIMATE
-
+    
+    
+    print("TYPES: ", page_dims[0],(int(width_small)),int(page_dims[1]),int(height_small))
+    
     page_x_range = np.linspace(0, page_dims[0], int(width_small))  #error => cast float to int
     page_y_range = np.linspace(0, page_dims[1], int(height_small)) #error => cast float to int
+    
 
     page_x_coords, page_y_coords = np.meshgrid(page_x_range, page_y_range)
 
@@ -863,7 +897,7 @@ def main():
         small = resize_to_screen(img)
         basename = os.path.basename(imgfile)
         name, _ = os.path.splitext(basename)
-
+        
         print ('loaded', basename, 'with size', imgsize(img),'\nand resized to', imgsize(small))
 
         if DEBUG_LEVEL >= 3:
@@ -873,7 +907,7 @@ def main():
 
         cinfo_list = get_contours(name, small, pagemask, 'text')
         spans = assemble_spans(name, small, pagemask, cinfo_list)
-
+        
         if len(spans) < 3:
             print ('  detecting lines because only', len(spans), 'text spans')
             cinfo_list = get_contours(name, small, pagemask, 'line')
@@ -896,14 +930,12 @@ def main():
 
         rough_dims, span_counts, params = get_default_params(corners,
                                                              ycoords, xcoords)
-
         dstpoints = np.vstack((corners[0].reshape((1, 1, 2)),) +
                               tuple(span_points))
 
         params = optimize_params(name, small,
                                  dstpoints,
                                  span_counts, params)
-
         page_dims = get_page_dims(corners, rough_dims, params)
 
         outfile = remap_image(name, img, small, page_dims, params)
