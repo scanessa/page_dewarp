@@ -296,15 +296,11 @@ def get_mask(name, small, pagemask, masktype):
 
         mask = cv2.dilate(mask, box(9, 1))
         
-        cv2.imwrite("mask_dilate_F.jpg", mask)
-
         if DEBUG_LEVEL >= 3:
             debug_show(name, 0.2, 'dilated', mask)
 
         #mask = cv2.erode(mask, box(1, 3)) #this creates an error: numpy.core._exceptions.MemoryError: Unable to allocate 707. GiB for an array with shape (94869108290,) and data type float64
         
-        cv2.imwrite("mask_erode_F.jpg", mask)
-
         if DEBUG_LEVEL >= 3:
             debug_show(name, 0.3, 'eroded', mask)
 
