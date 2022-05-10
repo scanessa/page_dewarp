@@ -290,15 +290,20 @@ def get_mask(name, small, pagemask, masktype):
                                      ADAPTIVE_WINSZ,
                                      25)
 
+
         if DEBUG_LEVEL >= 3:
             debug_show(name, 0.1, 'thresholded', mask)
 
         mask = cv2.dilate(mask, box(9, 1))
+        
+        cv2.imwrite("mask_dilate_F.jpg", mask)
 
         if DEBUG_LEVEL >= 3:
             debug_show(name, 0.2, 'dilated', mask)
 
-        mask = cv2.erode(mask, box(1, 3))
+        #mask = cv2.erode(mask, box(1, 3)) #this creates an error: numpy.core._exceptions.MemoryError: Unable to allocate 707. GiB for an array with shape (94869108290,) and data type float64
+        
+        cv2.imwrite("mask_erode_F.jpg", mask)
 
         if DEBUG_LEVEL >= 3:
             debug_show(name, 0.3, 'eroded', mask)
@@ -396,7 +401,7 @@ class ContourInfo(object):
 
         self.pred = None
         self.succ = None
-
+        
     def proj_x(self, point):
         return np.dot(self.tangent, point.flatten()-self.center)
 
@@ -453,14 +458,17 @@ def make_tight_mask(contour, xmin, ymin, width, height):
 def get_contours(name, small, pagemask, masktype):
 
     mask = get_mask(name, small, pagemask, masktype)
+    
+
     # In some environments/versions, cv2.findContours apparently returns a 2-tuple instead of 3-tuple
     # https://github.com/facebookresearch/maskrcnn-benchmark/issues/339
     # We are always interested in the second-to-last member (first or second member) of the tuple
 
     contours = cv2.findContours(mask, cv2.RETR_EXTERNAL,cv2.CHAIN_APPROX_NONE)[-2]
+    
 
     contours_out = []
-    print("Contours: ",contours)
+
     for contour in contours:
 
         rect = cv2.boundingRect(contour)
@@ -477,9 +485,10 @@ def get_contours(name, small, pagemask, masktype):
             continue
 
         contours_out.append(ContourInfo(contour, rect, tight_mask))
-
+                
     if DEBUG_LEVEL >= 2:
         visualize_contours(name, small, contours_out)
+
 
     return contours_out
 
@@ -488,7 +497,7 @@ def assemble_spans(name, small, pagemask, cinfo_list):
 
     # sort list
     cinfo_list = sorted(cinfo_list, key=lambda cinfo: cinfo.rect[1])
-
+    
     # generate all candidate edges
     candidate_edges = []
 
@@ -504,6 +513,7 @@ def assemble_spans(name, small, pagemask, cinfo_list):
 
     # for each candidate edge
     for _, cinfo_a, cinfo_b in candidate_edges:
+
         # if left and right are unassigned, join them
         if cinfo_a.succ is None and cinfo_b.pred is None:
             cinfo_a.succ = cinfo_b
@@ -517,7 +527,7 @@ def assemble_spans(name, small, pagemask, cinfo_list):
 
         # get the first on the list
         cinfo = cinfo_list[0]
-
+        
         # keep following predecessors until none exists
         while cinfo.pred:
             cinfo = cinfo.pred
@@ -533,6 +543,7 @@ def assemble_spans(name, small, pagemask, cinfo_list):
             cinfo_list.remove(cinfo)
             # add to span
             cur_span.append(cinfo)
+            
             width += cinfo.local_xrng[1] - cinfo.local_xrng[0]
             # set successor
             cinfo = cinfo.succ
@@ -548,7 +559,8 @@ def assemble_spans(name, small, pagemask, cinfo_list):
 
 
 def sample_spans(shape, spans):
-
+    
+    
     span_points = []
 
     for span in spans:
@@ -558,6 +570,7 @@ def sample_spans(shape, spans):
         for cinfo in span:
 
             yvals = np.arange(cinfo.mask.shape[0]).reshape((-1, 1))
+            
             totals = (yvals * cinfo.mask).sum(axis=0)
             means = totals / cinfo.mask.sum(axis=0)
 
@@ -895,9 +908,11 @@ def main():
 
         img = cv2.imread(imgfile)
         small = resize_to_screen(img)
+        
+        
         basename = os.path.basename(imgfile)
         name, _ = os.path.splitext(basename)
-        
+                
         print ('loaded', basename, 'with size', imgsize(img),'\nand resized to', imgsize(small))
 
         if DEBUG_LEVEL >= 3:
@@ -922,6 +937,7 @@ def main():
         span_points = sample_spans(small.shape, spans)
 
         print ('  got', len(spans), 'spans','\nwith', sum([len(pts) for pts in span_points]), 'points.')
+
 
         corners, ycoords, xcoords = keypoints_from_samples(name, small,
                                                            pagemask,
