@@ -866,11 +866,11 @@ def remap_image(name, img, small, page_dims, params):
                                 interpolation=cv2.INTER_CUBIC)
 
     img_gray = cv2.cvtColor(img, cv2.COLOR_RGB2GRAY)
-
     remapped = cv2.remap(img_gray, image_x_coords, image_y_coords,
                          cv2.INTER_CUBIC,
                          None, cv2.BORDER_REPLICATE)
-
+    
+    #Stella inserted binary thersholding to remove noise
     thresh = cv2.adaptiveThreshold(remapped, 255, cv2.ADAPTIVE_THRESH_MEAN_C,
                                    cv2.THRESH_BINARY, ADAPTIVE_WINSZ, 17)
 
